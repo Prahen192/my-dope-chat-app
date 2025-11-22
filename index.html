@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Dope Group Chat</title>
+    <style>
+        /* BASE STYLES */
+        :root {
+            /* Define main colors for easy change */
+            --primary-color: #25d366; /* Green */
+            --background-color: #f0f2f5; /* Light, soft background */
+            --secondary-bg: #ffffff;
+            --chat-bubble-bg-in: #ffffff;
+            --chat-bubble-bg-out: var(--primary-color);
+            --shadow-heavy: 0 6px 18px rgba(0, 0, 0, 0.15);
+            --chat-list-padding: 20px; /* Padding inside the chat-main for the message list */
+        }
+
+        body { 
+            margin: 0; 
+            padding-bottom: 50px; 
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--background-color); 
+            display: flex; 
+            overflow: hidden; 
+        }
+        
+        /* LAYOUT: Main Chat now uses full width */
+        #container {
+            display: flex;
+            width: 100%;
+            height: 100vh;
+        }
+        #chat-main {
+            flex-grow: 1;
+            padding-bottom: 70px; 
+            overflow-y: auto; 
+            position: relative;
+            /* Only standard padding is needed now */
+            padding-right: var(--chat-list-padding); 
+            padding-left: var(--chat-list-padding); 
+        }
+        
+        /* FORM/INPUT BAR: Now stretches full width */
+        #form { 
+            background: var(--secondary-bg); 
+            padding: 10px 20px; 
+            position: fixed; 
+            bottom: 0; 
+            left: 0;
+            right: 0; /* Stretches edge-to-edge */
+            display: flex; 
+            height: 50px; 
+            box-shadow: var(--shadow-heavy); 
+            z-index: 5; 
+            border-top: 1px solid #ddd;
+            align-items: center; 
+        }
+        #input, #user { 
+            border: 1px solid #e0e0e0; 
+            padding: 12px 18px; 
+            margin-right: 10px; 
+            border-radius: 25px; 
+            box-sizing: border-box;
+            font-size: 1.0em;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        #input:focus, #user:focus { 
+            border-color: var(--primary-color); 
+            box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.2); 
+            outline: none;
+        }
+        #user { width: 15%; background: #f9f9f9; }
+        #input { 
+            flex-grow: 1; 
+            background: var(--secondary-bg);
+            /* margin-right: 0; Handled by the button space */
+        }
+        
+        /* MESSAGE LIST STYLES */
+        #messages { 
+            list-style-type: none; 
+            margin: 0; 
+            padding: 0; 
+        }
+        #messages li { 
+            padding: 12px 18px; 
+            margin-bottom: 12px; 
+            border-radius: 20px; 
+            max-width: 65%; 
+            clear: both; 
+            word-wrap: break-word;
+            user-select: none; 
+            cursor: default;
+            position: relative;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); 
+            transition: transform 0.2s;
+        }
+        /* ANIMATION: Bubble hover (subtle lift) */
+        #messages li:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        /* ANIMATION: Message entry animation */
+        @keyframes smoothEntry {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        #messages li[data-animation="smooth-entry"] {
+            animation: smoothEntry 0.3s ease-out;
+        }
+        
+        /* BUBBLE TAILS */
+        #messages li::before {
+            content: "";
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            bottom: 0;
+        }
+
+        /* Incoming messages (left - Friend) */
+        #messages li {
+            background: var(--chat-bubble-bg-in); 
+            color: #1c1c1c; 
+            float: left;
+            border: 1px solid #f0f0f0;
+            border-bottom-left-radius: 4px;
+        }
+        /* Left Bubble Tail */
+        #messages li::before {
+            left: -8px;
+            border-width: 0 10px 10px 0;
+            border-color: transparent var(--chat-bubble-bg-in) transparent transparent;
+        }
+
+        /* Outgoing messages (right - Your message) - GREEN */
+        #messages li.outgoing {
+            background: var(--chat-bubble-bg-out); 
+            color: white;
+            float: right;
+            border: none; 
+            border-bottom-right-radius: 4px;
+        }
+        /* Right Bubble Tail - GREEN */
+        #messages li.outgoing::before {
+            right: -8px;
+            border-width: 0 0 10px 10px;
+            border-color: transparent transparent transparent var(--chat-bubble-bg-out);
+        }
+        
+        /* ⭐️ SEEN STATUS STYLES ⭐️ */
+        .status-mark {
+            float: right;
+            margin-left: 8px;
+            font-size: 1.2em; /* BIGGER TICK SIZE */
+            color: #444; 
+            position: relative;
+            top: 1px;
+        }
+
+        .status-mark.seen {
+            color: #000000; 
+        }
+        
+        #messages li.outgoing .status-mark {
+            color: #ffffff; 
+        }
+        #messages li.outgoing .status-mark.seen {
+            color: #ffffff; 
+        }
+        
+        /* TYPING INDICATOR */
+        #typing-indicator {
+            position: fixed; 
+            bottom: 75px; 
+            left: var(--chat-list-padding); 
+            right: 0; 
+            height: 20px; 
+            font-style: italic; 
+            color: #555; 
+            font-size: 0.9em;
+            background: var(--background-color); 
+            z-index: 4; 
+            pointer-events: none; 
+        }
+        
+        /* Time Stamp Styling */
+        .timestamp { display: block; font-size: 0.65em; margin-top: 5px; opacity: 0.7; text-align: right; line-height: 1; }
+        #messages li .timestamp { color: #555; }
+        #messages li.outgoing .timestamp { color: rgba(255, 255, 255, 0.9); }
+        
+        /* Reply Box Styling */
+        #reply-box { 
+            background: #e9f7f0; 
+            padding: 10px 20px; 
+            border-bottom: 1px solid #c8e6c9; 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            font-size: 0.9em; 
+            z-index: 5; 
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05); 
+            position: fixed; 
+            bottom: 70px; 
+            left: 0; 
+            right: 0; 
+        }
+        #reply-box button { background: none; border: none; font-weight: bold; cursor: pointer; color: #555; transition: color 0.2s; }
+        #reply-box button:hover { color: #333; }
+        
+        /* EDIT BOX STYLES */
+        #edit-box { 
+            background: #fff3e0; 
+            padding: 10px 20px; 
+            border-top: 2px solid #ffcc80; 
+            position: fixed; 
+            bottom: 70px; 
+            left: 0; 
+            right: 0; 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            font-size: 0.9em; 
+            z-index: 6; 
+            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05); 
+        }
+        #edit-input {
+            flex-grow: 1;
+            border: 1px solid #ffcc80; 
+            padding: 8px 12px; 
+            margin: 0 10px;
+            border-radius: 15px; 
+        }
+        #edit-box button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+        #save-edit-button {
+            background: #ffa726; 
+            color: white;
+        }
+        #cancel-edit-button {
+            background: #ccc;
+            color: #333;
+        }
+        
+        /* Modal & Menu Styles */
+        #custom-context-menu { position: fixed; background-color: var(--secondary-bg); border: 1px solid #ddd; border-radius: 8px; z-index: 1000; box-shadow: var(--shadow-heavy); overflow: hidden; }
+        #custom-context-menu li { padding: 10px 18px; cursor: pointer; border-bottom: 1px solid #eee; transition: background-color 0.1s; }
+        #custom-context-menu li:hover { background-color: #f0f0f0; }
+        #delete-modal { position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; }
+        #modal-content { background-color: var(--secondary-bg); padding: 30px; border-radius: 10px; width: 300px; text-align: center; box-shadow: var(--shadow-heavy); }
+        #modal-content p { font-size: 1.1em; margin-bottom: 20px; color: #333; }
+        #confirm-delete, #cancel-delete { padding: 10px 18px; border: none; border-radius: 25px; cursor: pointer; margin: 0 8px; font-weight: bold; transition: background-color 0.2s; }
+        #confirm-delete { background-color: #f44336; color: white; }
+        #cancel-delete { background-color: #ddd; color: #333; }
+        
+        /* Custom Scrollbar for Webkit Browsers */
+        #chat-main::-webkit-scrollbar { width: 8px; }
+        #chat-main::-webkit-scrollbar-thumb { background-color: #bbb; border-radius: 10px; }
+        #chat-main::-webkit-scrollbar-track { background: var(--background-color); }
+    </style>
+</head>
+<body>
+    
+    <div id="custom-context-menu" style="display:none;">
+        <ul style="list-style: none; margin: 0; padding: 0;">
+            <li id="menu-reply">Reply</li>
+            <li id="menu-dm">Send Private Message</li>
+            <li id="menu-delete">Delete Message</li>
+            <li id="menu-copy">Copy Text</li>
+            <li id="menu-edit">Edit Message</li> 
+            <li>Report (Like Discord!)</li>
+        </ul>
+    </div>
+
+    <div id="delete-modal" style="display:none;">
+        <div id="modal-content">
+            <p>Delete this message permanently?</p>
+            <button id="confirm-delete">Yes, Delete</button>
+            <button id="cancel-delete">Cancel</button>
+        </div>
+    </div>
+
+    <div id="container">
+        <div id="chat-main">
+            <div id="reply-box" style="display:none;">
+                Replying to: <span id="reply-text-display" style="font-weight: bold; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 80%;"></span> 
+                <button onclick="cancelReply()">X</button>
+            </div>
+
+            <ul id="messages"></ul>
+            
+            <div id="typing-indicator"></div> 
+        </div>
+
+        <div id="edit-box" style="display:none;">
+            Editing: <span id="edit-text-display" style="font-style: italic; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 50%;"></span>
+            <input id="edit-input" autocomplete="off" placeholder="Edit your message..." required />
+            <button id="save-edit-button">Save</button>
+            <button id="cancel-edit-button">Cancel</button>
+        </div>
+        
+        <form id="form">
+            <input id="user" placeholder="Your Name" required />
+            <input type="file" id="file-input" accept="image/*" style="display:none;" />
+            <button type="button" onclick="document.getElementById('file-input').click()" 
+                    style="background: #e0e0e0; border: none; padding: 10px; margin-right: 10px; border-radius: 50%; font-size: 1.2em; cursor: pointer; color: #555;">
+                📷
+            </button>
+            <input id="input" autocomplete="off" placeholder="Type a message..." required />
+            <button style="display: none;">Send</button> 
+        </form>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        var socket = io();
+        var form = document.getElementById('form');
+        var input = document.getElementById('input');
+        var user = document.getElementById('user');
+        var messages = document.getElementById('messages');
+        
+        // Variables for typing indicator
+        var typingIndicator = document.getElementById('typing-indicator');
+        var typingTimer;
+        var isTyping = false;
+        const TYPING_TIMEOUT = 3000;
+        
+        // Variables for reply state
+        var replyBox = document.getElementById('reply-box');
+        var replyTextDisplay = document.getElementById('reply-text-display');
+        var replyTarget = {
+            id: null,
+            text: null
+        };
+
+        // Variables for context menu and MODAL
+        var contextMenu = document.getElementById('custom-context-menu');
+        var menuReplyButton = document.getElementById('menu-reply');
+        var menuDmButton = document.getElementById('menu-dm'); 
+        var menuDeleteButton = document.getElementById('menu-delete');
+        var menuEditButton = document.getElementById('menu-edit');
+        var selectedMessage = { id: null, text: null, sender: null, originalElement: null }; 
+
+        var deleteModal = document.getElementById('delete-modal');
+        var confirmDeleteButton = document.getElementById('confirm-delete');
+        var cancelDeleteButton = document.getElementById('cancel-delete');
+        
+        // EDIT VARIABLES 
+        var editBox = document.getElementById('edit-box');
+        var editInput = document.getElementById('edit-input');
+        var editTextDisplay = document.getElementById('edit-text-display');
+        var saveEditButton = document.getElementById('save-edit-button');
+        var cancelEditButton = document.getElementById('cancel-edit-button');
+        var editingMessageId = null; 
+        
+        // DM VARIABLE (currently inactive)
+        var dmTarget = {
+            user: null
+        }; 
+        
+        // ⭐️ NEW UPLOAD VARIABLES ⭐️
+        var fileInput = document.getElementById('file-input');
+        
+        // Intersection Observer Setup (Seen/Unseen)
+        const seenOptions = {
+            root: document.getElementById('chat-main'), 
+            threshold: 1.0 
+        };
+
+        const seenObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                const messageElement = entry.target;
+                const senderElement = messageElement.querySelector('strong');
+                
+                if (!senderElement) return; 
+
+                const sender = senderElement.textContent.replace(':', '').trim();
+                
+                if (entry.isIntersecting && sender !== user.value) {
+                    const messageId = messageElement.getAttribute('data-id');
+                    
+                    socket.emit('mark seen', Number(messageId));
+                    observer.unobserve(messageElement);
+                }
+            });
+        }, seenOptions);
+        
+        
+        // Function to send username to server once set
+        user.addEventListener('change', function() {
+            if (user.value) {
+                socket.emit('set username', user.value);
+            }
+        });
+        user.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && user.value) {
+                socket.emit('set username', user.value);
+                input.focus();
+            }
+        });
+        
+        // Function to cancel the reply mode
+        function cancelReply() {
+            replyTarget.id = null;
+            replyTarget.text = null;
+            replyBox.style.display = 'none';
+        }
+
+        // Function to cancel the DM mode (currently inactive for DMs)
+        function cancelDM() {
+            dmTarget.user = null;
+            input.placeholder = "Type a message...";
+        }
+
+        // Function to hide the custom menu
+        function hideMenu() {
+            contextMenu.style.display = 'none';
+        }
+        
+        // ⭐️ NEW LISTENER: Handle File Selection and Convert to Base64 ⭐️
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Limit to 500 KB to prevent Socket.IO/server issues with huge strings
+            if (file.size > 1024 * 500) { 
+                alert('File size too large! Max 500 KB.');
+                fileInput.value = ''; 
+                return;
+            }
+
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                const base64Data = e.target.result;
+
+                // Send the image data to the server
+                socket.emit('image upload', {
+                    user: user.value,
+                    fileData: base64Data, // This is the giant string
+                    fileName: file.name
+                });
+                
+                fileInput.value = ''; 
+            };
+
+            reader.readAsDataURL(file); // Read file as Base64 string
+        });
+
+
+        // Typing detection logic
+        input.addEventListener('input', function() {
+            if (user.value) { 
+                if (!isTyping) {
+                    isTyping = true;
+                    socket.emit('typing', user.value);
+                }
+                
+                clearTimeout(typingTimer);
+                typingTimer = setTimeout(function() {
+                    socket.emit('stop typing', user.value);
+                    isTyping = false;
+                }, TYPING_TIMEOUT);
+            }
+        });
+
+        // Handle sending a message (Stop typing when sending)
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (input.value && user.value) {
+                var messageData = {
+                    user: user.value,
+                    text: input.value,
+                    replyToId: replyTarget.id,
+                    replyToText: replyTarget.text,
+                    dmTo: dmTarget.user 
+                };
+                
+                socket.emit('chat message', messageData);
+
+                input.value = '';
+                cancelReply(); 
+                cancelDM(); 
+                
+                clearTimeout(typingTimer);
+                if (isTyping) {
+                    socket.emit('stop typing', user.value);
+                    isTyping = false;
+                }
+            }
+        });
+        
+        // Disable Left-Click on messages
+        messages.addEventListener('click', function(e) {
+            if (e.target.closest('li')) {
+                e.preventDefault(); 
+            }
+        });
+
+        // Handle Right-Click (Context Menu) Listener (Existing Logic)
+        messages.addEventListener('contextmenu', function(e) {
+            const messageElement = e.target.closest('li');
+            if (messageElement) {
+                e.preventDefault(); 
+                hideMenu();
+
+                // 1. Store the message data
+                const messageId = messageElement.getAttribute('data-id');
+                const senderNameElement = messageElement.querySelector('strong');
+                const senderName = senderNameElement ? senderNameElement.textContent.replace(':', '').trim() : '';
+                
+                let messageText = messageElement.innerText;
+                const textNode = messageElement.firstChild;
+                if(textNode && textNode.nodeType === 3) {
+                   messageText = textNode.textContent.trim();
+                } else {
+                   messageText = messageElement.innerText.replace(/Replying to: ".*?"\s*|.*?:\s*|\d{1,2}:\d{2}\s+(AM|PM)|\(edited\)/g, '').trim(); 
+                }
+
+                selectedMessage.id = messageId;
+                selectedMessage.text = messageText;
+                selectedMessage.sender = senderName;
+                selectedMessage.originalElement = messageElement;
+
+                // 2. Hide/Show buttons based on message ownership
+                if (user.value && selectedMessage.sender === user.value) {
+                    menuDeleteButton.style.display = 'block'; 
+                    menuEditButton.style.display = 'block'; 
+                    menuReplyButton.style.display = 'none'; 
+                    menuDmButton.style.display = 'none';
+                } else {
+                    menuDeleteButton.style.display = 'none'; 
+                    menuEditButton.style.display = 'none'; 
+                    menuReplyButton.style.display = 'block'; 
+                    menuDmButton.style.display = 'block'; 
+                }
+
+                // 3. DYNAMIC POSITIONING LOGIC
+                const menuWidth = 200; 
+                const viewportWidth = window.innerWidth; 
+                const menuHeight = contextMenu.offsetHeight; 
+                const padding = 10; 
+
+                if (messageElement.classList.contains('outgoing')) {
+                    contextMenu.style.left = (messageElement.offsetLeft - menuWidth + messageElement.offsetWidth) + 'px';
+                    if (messageElement.offsetLeft + messageElement.offsetWidth + menuWidth > viewportWidth) {
+                         contextMenu.style.left = (viewportWidth - menuWidth - padding) + 'px'; 
+                    }
+                } else {
+                    const rightPosition = messageElement.offsetLeft + messageElement.offsetWidth;
+                    contextMenu.style.left = rightPosition + 'px';
+                    if (rightPosition + menuWidth > viewportWidth) {
+                        contextMenu.style.left = (viewportWidth - menuWidth - padding) + 'px';
+                    }
+                }
+                
+                contextMenu.style.top = (e.pageY - menuHeight - 10) + 'px'; 
+
+                // 4. Show the custom menu
+                contextMenu.style.display = 'block';
+            }
+        });
+        
+        // Handle Menu Clicks (Existing Logic)
+        menuReplyButton.addEventListener('click', function() {
+            replyTarget.id = selectedMessage.id;
+            replyTarget.text = selectedMessage.text;
+            replyTextDisplay.textContent = selectedMessage.text.substring(0, 30) + (selectedMessage.text.length > 30 ? '...' : '');
+            replyBox.style.display = 'flex'; 
+            input.focus();
+            hideMenu();
+            cancelDM(); 
+        });
+
+        menuDmButton.addEventListener('click', function() {
+            dmTarget.user = selectedMessage.sender;
+            input.placeholder = `Private message to ${dmTarget.user}... (Press Enter to send, Esc to cancel)`;
+            input.focus();
+            hideMenu();
+            cancelReply(); 
+        });
+        
+        menuDeleteButton.addEventListener('click', function() {
+            confirmDeleteButton.setAttribute('data-delete-id', selectedMessage.id);
+            deleteModal.style.display = 'flex'; 
+            hideMenu();
+        });
+        
+        confirmDeleteButton.addEventListener('click', function() {
+            const idToDelete = confirmDeleteButton.getAttribute('data-delete-id');
+            if (idToDelete) {
+                socket.emit('delete message', idToDelete);
+            }
+            deleteModal.style.display = 'none'; 
+            confirmDeleteButton.removeAttribute('data-delete-id');
+        });
+        
+        cancelDeleteButton.addEventListener('click', function() {
+            deleteModal.style.display = 'none'; 
+            confirmDeleteButton.removeAttribute('data-delete-id');
+        });
+        
+        menuEditButton.addEventListener('click', function() {
+            editInput.value = selectedMessage.text;
+            editTextDisplay.textContent = selectedMessage.text.substring(0, 30) + (selectedMessage.text.length > 30 ? '...' : '');
+            saveEditButton.setAttribute('data-edit-id', selectedMessage.id);
+            editBox.style.display = 'flex'; 
+            input.parentElement.style.display = 'none'; 
+            editInput.focus();
+            hideMenu();
+        });
+        
+        cancelEditButton.addEventListener('click', function() {
+            editBox.style.display = 'none';
+            input.parentElement.style.display = 'flex'; 
+            saveEditButton.removeAttribute('data-edit-id'); 
+        });
+
+        saveEditButton.addEventListener('click', function() {
+            const idToEdit = saveEditButton.getAttribute('data-edit-id');
+            if (idToEdit && editInput.value) {
+                const editData = {
+                    id: idToEdit,
+                    newText: editInput.value,
+                    user: user.value 
+                };
+                socket.emit('edit message', editData);
+                editBox.style.display = 'none';
+                input.parentElement.style.display = 'flex';
+                editInput.value = '';
+                saveEditButton.removeAttribute('data-edit-id'); 
+            }
+        });
+        
+        document.addEventListener('click', hideMenu);
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                cancelReply();
+                cancelDM();
+            }
+        });
+
+        // -----------------------------------------------------
+        // IMAGE/URL FORMATTING LOGIC
+        // -----------------------------------------------------
+        
+        function formatMessageText(text) {
+            // Regex for external links
+            const imageRegex = /(http(s?):)([/|.|\w|\s|-])*\.(?:jpg|jpeg|gif|png|webp|avif)/i;
+            // Regex for uploaded files served by the server
+            const uploadRegex = /^\/uploads\/.*?\.(?:jpg|jpeg|gif|png|webp|avif)$/i;
+
+            if (imageRegex.test(text.trim()) || uploadRegex.test(text.trim())) {
+                // ⭐️ UPDATED: max-width set to 200px and added border ⭐️
+                return `<img src="${text.trim()}" alt="Shared Media" style="max-width: 200px; height: auto; border-radius: 8px; margin-top: 5px; border: 1px solid #ddd;" onclick="window.open(this.src, '_blank')">`;
+            }
+            return text;
+        }
+
+        // -----------------------------------------------------
+        // CORE MESSAGE DISPLAY FUNCTION
+        // -----------------------------------------------------
+
+        function appendMessage(msg, prepend = false) {
+            var item = document.createElement('li');
+            item.setAttribute('data-id', msg.id);
+            item.setAttribute('data-animation', prepend ? 'none' : 'smooth-entry'); 
+            
+            let messageContent = '';
+            if (msg.replyToText) {
+                messageContent += `
+                    <div style="background: rgba(0,0,0,0.05); padding: 5px; border-radius: 5px; margin-bottom: 5px; font-size: 0.8em; opacity: 0.8; border: 1px solid #ccc;">
+                        Replying to: "${msg.replyToText.substring(0, 30)}${msg.replyToText.length > 30 ? '...' : ''}"
+                    </div>`;
+            } 
+            
+            // Apply the image formatting before displaying the text
+            const formattedText = formatMessageText(msg.text);
+            
+            let statusMark = '';
+            if (msg.user === user.value) {
+                statusMark = `<span id="status-${msg.id}" class="status-mark ${msg.seen ? 'seen' : ''}">
+                    ${msg.seen ? '✓✓' : '✓'}
+                </span>`; 
+            }
+
+            // Add user, text (formatted), and the new timestamp
+            messageContent += `
+                <strong>${msg.user}:</strong> ${formattedText}
+                <span class="timestamp">${msg.timestamp}${statusMark}</span>`; 
+            
+            item.innerHTML = messageContent;
+
+            // DYNAMIC BUBBLE LOGIC
+            if (msg.user === user.value) {
+                item.classList.add('outgoing');
+            }
+
+            if (prepend) {
+                messages.prepend(item);
+            } else {
+                messages.appendChild(item);
+            }
+            
+            // Start observing incoming messages
+            if (msg.user !== user.value) {
+                seenObserver.observe(item);
+            }
+            
+            // CRITICAL SCROLL FIX
+            const chatMain = document.getElementById('chat-main');
+            chatMain.scrollTop = chatMain.scrollHeight;
+            
+            return item;
+        }
+
+        // -----------------------------------------------------
+        // SOCKET LISTENERS
+        // -----------------------------------------------------
+
+        socket.on('chat message', function(msg) {
+            appendMessage(msg);
+        });
+
+        socket.on('load history', function(history) {
+            messages.innerHTML = ''; 
+            history.forEach(msg => {
+                appendMessage(msg, true); 
+            });
+            const chatMain = document.getElementById('chat-main');
+            chatMain.scrollTop = chatMain.scrollHeight;
+        });
+        
+        socket.on('message seen', function(messageId) {
+            const statusSpan = document.getElementById(`status-${messageId}`);
+            if (statusSpan) {
+                statusSpan.textContent = '✓✓'; 
+                statusSpan.classList.add('seen'); 
+            }
+        });
+
+        socket.on('delete message', function(messageId) {
+            const messageToDelete = document.querySelector(`li[data-id="${messageId}"]`);
+            if (messageToDelete) {
+                seenObserver.unobserve(messageToDelete); 
+                messageToDelete.remove(); 
+            }
+        });
+        
+        socket.on('edit message confirmed', function(data) {
+            const messageToEdit = document.querySelector(`li[data-id="${data.id}"]`);
+            if (messageToEdit) {
+                const senderElement = messageToEdit.querySelector('strong');
+                const timestampElement = messageToEdit.querySelector('.timestamp');
+                const replyContent = messageToEdit.querySelector('div') ? messageToEdit.querySelector('div').outerHTML : '';
+                const statusMarkElement = messageToEdit.querySelector('.status-mark') ? messageToEdit.querySelector('.status-mark').outerHTML : '';
+                
+                // Use the formatting function on the new text
+                const formattedNewText = formatMessageText(data.newText);
+
+                messageToEdit.innerHTML = `
+                    ${replyContent}
+                    <strong>${senderElement.textContent}</strong> ${formattedNewText} 
+                    <span style="font-size:0.7em; color: #aaa;">(edited)</span>
+                    ${timestampElement.outerHTML.replace(/<\/span>$/, statusMarkElement + '</span>')}`; 
+            }
+        });
+        
+        socket.on('typing', function(userTyping) {
+            typingIndicator.textContent = `${userTyping} is typing...`;
+        });
+
+        socket.on('stop typing', function(userStopping) {
+            if (typingIndicator.textContent.startsWith(userStopping)) {
+                 typingIndicator.textContent = ''; 
+            }
+        });
+    </script>
+</body>
+</html>
